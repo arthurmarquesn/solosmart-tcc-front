@@ -30,27 +30,29 @@ export class LoginPage {
 
     const payload = { email: this.email, senha: this.senha };
 
-    this.http.post('http://localhost:3000/api/login', payload)
-      .subscribe({
-        next: (res: any) => {
+    this.http.post<any>('http://localhost:3000/api/login', payload)
+  .subscribe({
+    next: (res) => {
 
-          // ✅ AGORA salva somente se o backend respondeu OK
-          localStorage.setItem('usuarioLogado', 'true');
-          localStorage.setItem('userEmail', this.email);
+      // 🔐 Salva o token
+      localStorage.setItem('token', res.token);
 
-          alert('Login realizado com sucesso!');
-          this.router.navigate(['/dashboard']);
-        },
-        error: (err) => {
-          console.error('Erro no login:', err);
+      // 👤 Salva dados do usuário
+      localStorage.setItem('userEmail', res.user.email);
+      localStorage.setItem('userCidade', res.user.cidade);
+      localStorage.setItem('userUf', res.user.uf);
 
-          // ❌ Remove qualquer login antigo inválido
-          localStorage.removeItem('usuarioLogado');
-          localStorage.removeItem('userEmail');
+      alert('Login realizado com sucesso!');
+      this.router.navigate(['/dashboard']);
+    },
+    error: (err) => {
+      console.error('Erro no login:', err);
 
-          alert('Email ou senha inválidos!');
-        }
-      });
+      localStorage.clear();
+
+      alert('Email ou senha inválidos!');
+    }
+  });
   }
 
 }

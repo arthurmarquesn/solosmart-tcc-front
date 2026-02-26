@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Subscription, interval } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { Router } from '@angular/router';
@@ -18,15 +18,11 @@ export class DashboardPage implements OnInit, OnDestroy {
 
   umidade: number = 0;
   ultimaAtualizacao: string = '';
-  
-  // Estrutura de dados do clima
-  clima: any = null; 
+  clima: any = null;
 
-  // Coordenadas padrão (Pompeia)
-  lat: number = -21.7495;
-  lon: number = -50.3342;
+  lat: number =  48.8566;
+  lon: number = 2.3522;
 
-  // 🛠️ MUDANÇA AQUI: Alterado de IP fixo para localhost para evitar o erro de Timeout
   private sensorApiUrl = 'http://localhost:3000/api/sensor';
   private climaApiUrl = 'http://localhost:3000/api/clima';
   private subscription!: Subscription;
@@ -41,57 +37,77 @@ export class DashboardPage implements OnInit, OnDestroy {
   }
 
   logout() {
-    localStorage.removeItem('usuarioLogado');
+    localStorage.clear();
     this.router.navigate(['/login']);
   }
 
-  // 🎨 MUDANÇA AQUI: Cores baseadas na sua identidade visual SoloSmart
   getColor(umidade: number): string {
-    if (umidade < 30) return "danger";  // Muito seco (Laranja/Vermelho)
-    if (umidade >= 30 && umidade <= 60) return "success"; // Ideal (Verde)
-    return "primary"; // Muito úmido (Azul)
+    if (umidade < 30) return "danger";
+    if (umidade >= 30 && umidade <= 60) return "success";
+    return "primary";
   }
 
   ngOnInit() {
-    // 🔄 Atualiza a cada 5 segundos os dados do sensor
+
+    const token = localStorage.getItem('token');
+
+    // 🔒 Se não tiver token, volta pro login
+    if (!token) {
+      this.router.navigate(['/login']);
+      return;
+    }
+
+    const headers = new HttpHeaders({
+      Authorization: `Bearer ${token}`
+    });
+
+    // 🔄 Atualiza sensor a cada 5s
     this.subscription = interval(5000)
       .pipe(
-        // O switchMap cancela a requisição anterior se a nova começar, evitando travar o app
-        switchMap(() => this.http.get<any>(this.sensorApiUrl))
+        switchMap(() =>
+          this.http.get<any>(this.sensorApiUrl, { headers })
+        )
       )
       .subscribe({
         next: (res) => {
-          // Ajustado para verificar a estrutura que vem do seu Node.js
           if (res && res.recebido) {
             this.umidade = res.recebido.umidade;
             this.ultimaAtualizacao = new Date().toLocaleTimeString();
           }
         },
         error: (err) => {
-          console.error('Erro ao buscar dados do sensor (Verifique se o Node.js está rodando):', err);
+          console.error('Erro ao buscar sensor:', err);
+
+          // Se token expirou (401), força logout
+          if (err.status === 401) {
+            localStorage.clear();
+            this.router.navigate(['/login']);
+          }
         }
       });
 
-    // 🔹 Busca clima ao iniciar a página
-    this.buscarClima();
+    // 🔹 Buscar clima
+    this.buscarClima(headers);
   }
 
-  buscarClima() {
+  buscarClima(headers: HttpHeaders) {
+
     const url = `${this.climaApiUrl}?lat=${this.lat}&lon=${this.lon}`;
-    
-    this.http.get<any>(url).subscribe({
-      next: (res) => {
-        if (res && res.atual) {
-          this.clima = res;
-          console.log('🌤️ Dados do clima carregados:', this.clima);
+
+    this.http.get<any>(url, { headers })
+      .subscribe({
+        next: (res) => {
+          if (res && res.atual) {
+            this.clima = res;
+          }
+        },
+        error: (err) => {
+          console.error('Erro ao buscar clima:', err);
         }
-      },
-      error: (err) => console.error('Erro ao buscar clima:', err)
-    });
+      });
   }
 
   ngOnDestroy() {
-    // Importante para não deixar o intervalo rodando na memória após sair da página
     if (this.subscription) {
       this.subscription.unsubscribe();
     }
